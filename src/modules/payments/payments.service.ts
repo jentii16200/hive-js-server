@@ -1,13 +1,14 @@
 // src/modules/payments/payments.service.ts
-import { Injectable, HttpStatus } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import axios from 'axios';
 import { Model } from 'mongoose';
-import { Payments } from '../../database/schema/Payments.schema';
 import { Orders } from '../../database/schema/Orders.schema';
+import { Payments } from '../../database/schema/Payments.schema';
 import { Users } from '../../database/schema/Users.schema';
-import { CreatePaymentDto } from './dto/create-payment.dto';
-import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 import { RESPONSE } from '../../utils/response.util';
+import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
+import { CreatePaymentDto } from './dto/create-payment.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -22,7 +23,9 @@ export class PaymentsService {
   }
 
   async createPayment(createPaymentDto: CreatePaymentDto) {
+    console.log('triggering');
     try {
+      console.log('check asdasd');
       const currency = this.defaultCurrency(createPaymentDto.currency);
       const amountInCents = Math.round(createPaymentDto.amount * 100);
 
@@ -63,20 +66,23 @@ export class PaymentsService {
         const authHeader =
           'Basic ' + Buffer.from(secret + ':').toString('base64');
 
-        // 1. Create intent
-        const intentResp = await fetch(
-          'https://api.paymongo.com/v1/payment_intents',
-          {
-            method: 'POST',
-            headers: {
-              Authorization: authHeader,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
+        const axiosConfig = {
+          headers: {
+            Authorization: authHeader,
+            'Content-Type': 'application/json',
+          },
+        };
+
+        try {
+          // 1. Create Payment Intent
+          console.log('[PayMongo] Creating intent...');
+          const intentResp = await axios.post(
+            'https://api.paymongo.com/v1/payment_intents',
+            {
               data: {
                 attributes: {
                   amount: amountInCents,
-                  payment_method_allowed: ['gcash'],
+                  payment_method_allowed: ['gcash', 'paymaya'],
                   currency: currency.toUpperCase(),
                   description:
                     createPaymentDto.description ??
@@ -87,42 +93,30 @@ export class PaymentsService {
                   },
                 },
               },
-            }),
-          },
-        );
-        const intentData = await intentResp.json();
-        if (!intentResp.ok) {
-          const errorMsg = intentData?.errors?.[0]?.detail ?? 'PayMongo error';
-          return RESPONSE(
-            HttpStatus.BAD_REQUEST,
-            {},
-            'Error creating intent: ' + errorMsg,
-          );
-        }
-        const intentId = intentData?.data?.id;
-
-        // 2. Lookup user for billing
-        const user = await this.usersModel
-          .findById(createPaymentDto.userId)
-          .lean();
-        if (!user) {
-          return RESPONSE(
-            HttpStatus.BAD_REQUEST,
-            {},
-            'User not found for billing info',
-          );
-        }
-
-        // 3. Create payment method
-        const methodResp = await fetch(
-          'https://api.paymongo.com/v1/payment_methods',
-          {
-            method: 'POST',
-            headers: {
-              Authorization: authHeader,
-              'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
+            axiosConfig,
+          );
+
+          const intentId = intentResp.data?.data?.id;
+          console.log('[PayMongo] Intent created:', intentId);
+
+          // 2. Lookup user for billing
+          const user = await this.usersModel
+            .findById(createPaymentDto.userId)
+            .lean();
+          if (!user) {
+            return RESPONSE(
+              HttpStatus.BAD_REQUEST,
+              {},
+              'User not found for billing info',
+            );
+          }
+
+          // 3. Create Payment Method
+          console.log('[PayMongo] Creating payment method...');
+          const methodResp = await axios.post(
+            'https://api.paymongo.com/v1/payment_methods',
+            {
               data: {
                 attributes: {
                   type: 'gcash',
@@ -133,30 +127,18 @@ export class PaymentsService {
                   },
                 },
               },
-            }),
-          },
-        );
-        const methodData = await methodResp.json();
-        if (!methodResp.ok) {
-          const errorMsg = methodData?.errors?.[0]?.detail ?? 'PayMongo error';
-          return RESPONSE(
-            HttpStatus.BAD_REQUEST,
-            {},
-            'Error creating method: ' + errorMsg,
-          );
-        }
-        const methodId = methodData?.data?.id;
-
-        // 4. Attach method to intent
-        const attachResp = await fetch(
-          `https://api.paymongo.com/v1/payment_intents/${intentId}/attach`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: authHeader,
-              'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
+            axiosConfig,
+          );
+
+          const methodId = methodResp.data?.data?.id;
+          console.log('[PayMongo] Method created:', methodId);
+
+          // 4. Attach Payment Method to Intent
+          console.log('[PayMongo] Attaching payment method...');
+          const attachResp = await axios.post(
+            `https://api.paymongo.com/v1/payment_intents/${intentId}/attach`,
+            {
               data: {
                 attributes: {
                   payment_method: methodId,
@@ -165,44 +147,53 @@ export class PaymentsService {
                     'https://192.168.254.106:2701/payments/success',
                 },
               },
-            }),
-          },
-        );
-        const attachData = await attachResp.json();
-        if (!attachResp.ok) {
-          const errorMsg = attachData?.errors?.[0]?.detail ?? 'PayMongo error';
+            },
+            axiosConfig,
+          );
+
+          const redirectUrl =
+            attachResp.data?.data?.attributes?.next_action?.redirect?.url;
+          console.log('[PayMongo] Redirect URL:', redirectUrl);
+
+          // 5. Save Payment in DB
+          const payment = new this.paymentsModel({
+            orderId: createPaymentDto.orderId,
+            userId: createPaymentDto.userId,
+            amount: createPaymentDto.amount,
+            paymentMethod: 'paymongo_gcash',
+            transactionId: intentId,
+            status: 'requires_action', // pending until user completes payment
+            currency,
+            description: createPaymentDto.description,
+            providerResponseRaw: JSON.stringify(attachResp.data),
+            metadata: {
+              orderId: createPaymentDto.orderId,
+              userId: createPaymentDto.userId,
+            },
+          });
+
+          const savedPayment = await payment.save();
+
+          return RESPONSE(
+            HttpStatus.CREATED,
+            { redirectUrl, payment: savedPayment },
+            'GCash checkout link created',
+          );
+        } catch (error: any) {
+          console.error(
+            '[PayMongo] Error:',
+            error?.response?.data || error.message,
+          );
+          const errMsg =
+            error?.response?.data?.errors?.[0]?.detail ??
+            error.message ??
+            'Unknown PayMongo error';
           return RESPONSE(
             HttpStatus.BAD_REQUEST,
             {},
-            'Error attaching method: ' + errorMsg,
+            'Error processing PayMongo payment: ' + errMsg,
           );
         }
-
-        const redirectUrl =
-          attachData?.data?.attributes?.next_action?.redirect?.url;
-
-        const payment = new this.paymentsModel({
-          orderId: createPaymentDto.orderId,
-          userId: createPaymentDto.userId,
-          amount: createPaymentDto.amount,
-          paymentMethod: 'paymongo_gcash',
-          transactionId: intentId,
-          status: 'requires_action',
-          currency,
-          description: createPaymentDto.description,
-          providerResponseRaw: JSON.stringify(attachData),
-          metadata: {
-            orderId: createPaymentDto.orderId,
-            userId: createPaymentDto.userId,
-          },
-        });
-        const savedPayment = await payment.save();
-
-        return RESPONSE(
-          HttpStatus.CREATED,
-          { redirectUrl, payment: savedPayment },
-          'GCash checkout link created',
-        );
       }
 
       return RESPONSE(
@@ -211,6 +202,7 @@ export class PaymentsService {
         'Unsupported payment method: ' + createPaymentDto.paymentMethod,
       );
     } catch (error: any) {
+      console.log('yoow whats the error ', error);
       console.error(
         '[PaymentsService] createPayment error:',
         error?.message,

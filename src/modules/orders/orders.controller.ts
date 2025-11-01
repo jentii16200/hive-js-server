@@ -1,17 +1,18 @@
 // src/modules/orders/orders.controller.ts
 import {
+  Body,
   Controller,
+  Delete,
   Get,
+  NotFoundException,
+  Param,
   Post,
   Put,
-  Param,
-  Body,
-  Delete,
-  NotFoundException,
+  Query,
 } from '@nestjs/common';
-import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { OrdersService } from './orders.service';
 
 @Controller('orders')
 export class OrdersController {
@@ -25,8 +26,8 @@ export class OrdersController {
 
   // ✅ Get all orders
   @Get()
-  async findAll() {
-    return this.ordersService.findAllOrders();
+  async findAll(@Query('page') page = '1', @Query('limit') limit = '10') {
+    return this.ordersService.findAllOrders(+page, +limit);
   }
 
   // ✅ Get one order by ID

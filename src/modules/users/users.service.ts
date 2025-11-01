@@ -1,12 +1,12 @@
 // src/modules/users/users.service.ts
-import { Injectable, HttpStatus } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { RESPONSE } from 'src/utils/response.util';
-import { Users } from '../../database/schema/Users.schema';
-import * as bcrypt from 'bcrypt';
+import { Injectable, HttpStatus } from "@nestjs/common";
+import { CreateUserDto } from "./dto/create-user.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
+import { RESPONSE } from "src/utils/response.util";
+import { Users } from "../../database/schema/Users.schema";
+import * as bcrypt from "bcrypt";
 
 @Injectable()
 export class UsersService {
@@ -17,11 +17,11 @@ export class UsersService {
       const userData: any = { ...createUserDto };
       const response = await this.userModel.create(userData);
       if (!response) {
-        return RESPONSE(HttpStatus.BAD_REQUEST, {}, 'User not created!');
+        return RESPONSE(HttpStatus.BAD_REQUEST, {}, "User not created!");
       }
       return response;
     } catch (error: any) {
-      throw new Error('Internal server error: ' + error.message);
+      throw new Error("Internal server error: " + error.message);
     }
   }
 
@@ -29,14 +29,14 @@ export class UsersService {
     try {
       let users = await this.userModel.find();
       if (users.length === 0) {
-        return RESPONSE(HttpStatus.NOT_FOUND, {}, 'No users found!');
+        return RESPONSE(HttpStatus.NOT_FOUND, {}, "No users found!");
       }
-      return RESPONSE(HttpStatus.OK, users, 'Users fetched successfully!');
+      return RESPONSE(HttpStatus.OK, users, "Users fetched successfully!");
     } catch (error: any) {
       return RESPONSE(
         HttpStatus.INTERNAL_SERVER_ERROR,
         {},
-        'Error fetching users: ' + error.message,
+        "Error fetching users: " + error.message
       );
     }
   }
@@ -44,7 +44,7 @@ export class UsersService {
   async findOneUserRaw(id: string) {
     return this.userModel
       .findById(id)
-      .select('_id fullName email role avatar isVerified')
+      .select("_id fullName email role avatar isVerified")
       .exec();
   }
 
@@ -52,14 +52,14 @@ export class UsersService {
     try {
       const user = await this.findOneUserRaw(id);
       if (!user) {
-        return RESPONSE(HttpStatus.NOT_FOUND, {}, 'User not found!');
+        return RESPONSE(HttpStatus.NOT_FOUND, {}, "User not found!");
       }
-      return RESPONSE(HttpStatus.OK, user, 'User fetched successfully!');
+      return RESPONSE(HttpStatus.OK, user, "User fetched successfully!");
     } catch (error: any) {
       return RESPONSE(
         HttpStatus.INTERNAL_SERVER_ERROR,
         {},
-        'Error fetching user: ' + error.message,
+        "Error fetching user: " + error.message
       );
     }
   }
@@ -75,14 +75,14 @@ export class UsersService {
         .findByIdAndUpdate(id, updateData, { new: true })
         .exec();
       if (!updatedUser) {
-        return RESPONSE(HttpStatus.NOT_FOUND, {}, 'User not found!');
+        return RESPONSE(HttpStatus.NOT_FOUND, {}, "User not found!");
       }
-      return RESPONSE(HttpStatus.OK, updatedUser, 'User updated successfully!');
+      return RESPONSE(HttpStatus.OK, updatedUser, "User updated successfully!");
     } catch (error: any) {
       return RESPONSE(
         HttpStatus.INTERNAL_SERVER_ERROR,
         {},
-        'Error updating user: ' + error.message,
+        "Error updating user: " + error.message
       );
     }
   }
@@ -91,14 +91,14 @@ export class UsersService {
     try {
       let deletedUser = await this.userModel.findByIdAndDelete(id).exec();
       if (!deletedUser) {
-        return RESPONSE(HttpStatus.NOT_FOUND, {}, 'User not found!');
+        return RESPONSE(HttpStatus.NOT_FOUND, {}, "User not found!");
       }
-      return RESPONSE(HttpStatus.OK, {}, 'User deleted successfully!');
+      return RESPONSE(HttpStatus.OK, {}, "User deleted successfully!");
     } catch (error: any) {
       return RESPONSE(
         HttpStatus.INTERNAL_SERVER_ERROR,
         {},
-        'Error deleting user: ' + error.message,
+        "Error deleting user: " + error.message
       );
     }
   }
@@ -115,16 +115,16 @@ export class UsersService {
     try {
       const user = await this.userModel.findById(userId);
       if (!user) {
-        return RESPONSE(HttpStatus.NOT_FOUND, {}, 'User not found!');
+        return RESPONSE(HttpStatus.NOT_FOUND, {}, "User not found!");
       }
       user.addresses.push(address);
       await user.save();
-      return RESPONSE(HttpStatus.OK, user, 'Address added successfully!');
+      return RESPONSE(HttpStatus.OK, user, "Address added successfully!");
     } catch (error: any) {
       return RESPONSE(
         HttpStatus.INTERNAL_SERVER_ERROR,
         {},
-        'Error adding address: ' + error.message,
+        "Error adding address: " + error.message
       );
     }
   }
@@ -133,16 +133,16 @@ export class UsersService {
     try {
       const user = await this.userModel.findById(userId);
       if (!user) {
-        return RESPONSE(HttpStatus.NOT_FOUND, {}, 'User not found!');
+        return RESPONSE(HttpStatus.NOT_FOUND, {}, "User not found!");
       }
       user.addresses = addresses;
       await user.save();
-      return RESPONSE(HttpStatus.OK, user, 'Addresses updated successfully!');
+      return RESPONSE(HttpStatus.OK, user, "Addresses updated successfully!");
     } catch (error: any) {
       return RESPONSE(
         HttpStatus.INTERNAL_SERVER_ERROR,
         {},
-        'Error updating addresses: ' + error.message,
+        "Error updating addresses: " + error.message
       );
     }
   }
@@ -151,16 +151,16 @@ export class UsersService {
     try {
       const user = await this.userModel.findById(userId);
       if (!user) {
-        return RESPONSE(HttpStatus.NOT_FOUND, {}, 'User not found!');
+        return RESPONSE(HttpStatus.NOT_FOUND, {}, "User not found!");
       }
       user.addresses.splice(index, 1);
       await user.save();
-      return RESPONSE(HttpStatus.OK, user, 'Address removed successfully!');
+      return RESPONSE(HttpStatus.OK, user, "Address removed successfully!");
     } catch (error: any) {
       return RESPONSE(
         HttpStatus.INTERNAL_SERVER_ERROR,
         {},
-        'Error removing address: ' + error.message,
+        "Error removing address: " + error.message
       );
     }
   }

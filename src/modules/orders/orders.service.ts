@@ -1,10 +1,10 @@
 // src/modules/orders/orders.service.ts
-import { Injectable, HttpStatus } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Orders } from '../../database/schema/Orders.schema';
-import { CreateOrderDto } from './dto/create-order.dto';
 import { RESPONSE } from '../../utils/response.util';
+import { CreateOrderDto } from './dto/create-order.dto';
 
 @Injectable()
 export class OrdersService {
@@ -53,15 +53,37 @@ export class OrdersService {
     }
   }
 
-  async findAllOrders() {
+  async findAllOrders(page = 1, limit = 10) {
     try {
-      const orders = await this.orderModel
-        .find()
-        .populate('userId', 'name email')
-        .populate('items.productId', 'designName price')
-        .exec();
+      const skip = (page - 1) * limit;
 
-      return RESPONSE(HttpStatus.OK, orders, 'Orders fetched successfully');
+      const [orders, total] = await Promise.all([
+        this.orderModel
+          .find()
+          .populate('userId', 'fullName email')
+          .populate('items.productId', 'designName price')
+          .sort({ orderedAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .exec(),
+        this.orderModel.countDocuments().exec(),
+      ]);
+
+      const totalPages = Math.ceil(total / limit);
+
+      return RESPONSE(
+        HttpStatus.OK,
+        {
+          orders,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages,
+          },
+        },
+        'Orders fetched successfully',
+      );
     } catch (error: any) {
       return RESPONSE(
         HttpStatus.INTERNAL_SERVER_ERROR,
