@@ -25,9 +25,14 @@ export class OrdersController {
   }
 
   // ✅ Get all orders
+  // src/modules/orders/orders.controller.ts
   @Get()
-  async findAll(@Query('page') page = '1', @Query('limit') limit = '10') {
-    return this.ordersService.findAllOrders(+page, +limit);
+  async findAll(
+    @Query('page') page = '1',
+    @Query('limit') limit = '10',
+    @Query('search') search?: string,
+  ) {
+    return this.ordersService.findAllOrders(+page, +limit, search);
   }
 
   // ✅ Get one order by ID

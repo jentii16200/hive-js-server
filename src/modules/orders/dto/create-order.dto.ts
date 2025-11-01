@@ -1,16 +1,16 @@
 // src/modules/orders/dto/create-order.dto.ts
-import {
-  IsMongoId,
-  IsString,
-  IsNotEmpty,
-  IsEnum,
-  IsArray,
-  ValidateNested,
-  IsNumber,
-  Min,
-  IsOptional,
-} from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsEnum,
+  IsMongoId,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 export enum OrderStatus {
   PENDING = 'pending',
@@ -20,6 +20,9 @@ export enum OrderStatus {
   SHIPPED = 'shipped',
   DELIVERED = 'delivered',
   CANCELLED = 'cancelled',
+  TORECEIVED = 'to_received',
+  TOSHIPPED = 'to_ship',
+  COMPLETED = 'completed',
 }
 
 export enum PaymentMethod {

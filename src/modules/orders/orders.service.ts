@@ -1,11 +1,10 @@
 // src/modules/orders/orders.service.ts
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import mongoose, { Model } from 'mongoose';
 import { Orders } from '../../database/schema/Orders.schema';
 import { RESPONSE } from '../../utils/response.util';
 import { CreateOrderDto } from './dto/create-order.dto';
-
 @Injectable()
 export class OrdersService {
   constructor(@InjectModel(Orders.name) private orderModel: Model<Orders>) {}
@@ -53,34 +52,113 @@ export class OrdersService {
     }
   }
 
-  async findAllOrders(page = 1, limit = 10) {
+  async findAllOrders(page = 1, limit = 10, search?: string) {
     try {
       const skip = (page - 1) * limit;
+      const pipeline: any[] = [];
 
-      const [orders, total] = await Promise.all([
+      // 1. Convert userId string → ObjectId
+      pipeline.push({
+        $addFields: {
+          userObjectId: {
+            $cond: {
+              if: { $eq: [{ $type: '$userId' }, 'string'] },
+              then: { $toObjectId: '$userId' },
+              else: '$userId',
+            },
+          },
+        },
+      });
+
+      // 2. Lookup users
+      pipeline.push({
+        $lookup: {
+          from: 'users',
+          localField: 'userObjectId',
+          foreignField: '_id',
+          as: 'user',
+        },
+      });
+      pipeline.push({
+        $unwind: { path: '$user', preserveNullAndEmptyArrays: true },
+      });
+
+      // ✅ Rename for frontend compatibility
+      pipeline.push({
+        $addFields: { userId: '$user' },
+      });
+
+      // 3. Lookup products
+      pipeline.push({
+        $lookup: {
+          from: 'products',
+          localField: 'items.productId',
+          foreignField: '_id',
+          as: 'products',
+        },
+      });
+
+      // 4. Search
+      if (search) {
+        const regex = new RegExp(search, 'i');
+        const isObjectId =
+          /^[0-9a-fA-F]{24}$/.test(search.trim()) || search.length >= 12;
+
+        const match: any = {
+          $or: [
+            { 'shippingAddress.fullName': { $regex: regex } },
+            { 'shippingAddress.phone': { $regex: regex } },
+            { 'userId.fullName': { $regex: regex } },
+            { 'userId.email': { $regex: regex } },
+          ],
+        };
+
+        if (isObjectId) {
+          match.$or.push({ _id: new mongoose.Types.ObjectId(search.trim()) });
+        }
+
+        pipeline.push({ $match: match });
+      }
+
+      // 5. Sort & Paginate
+      pipeline.push({ $sort: { orderedAt: -1 } });
+      pipeline.push({ $skip: skip });
+      pipeline.push({ $limit: limit });
+
+      // 6. Project
+      pipeline.push({
+        $project: {
+          _id: 1,
+          status: 1,
+          totalAmount: 1,
+          paymentMethod: 1,
+          orderedAt: 1,
+          shippingAddress: 1,
+          'userId._id': 1,
+          'userId.fullName': 1,
+          'userId.email': 1,
+          'products._id': 1,
+          'products.designName': 1,
+          'products.price': 1,
+          'products.imageUrl': 1,
+        },
+      });
+
+      // 7. Count total
+      const [orders, totalCount] = await Promise.all([
+        this.orderModel.aggregate(pipeline),
         this.orderModel
-          .find()
-          .populate('userId', 'fullName email')
-          .populate('items.productId', 'designName price')
-          .sort({ orderedAt: -1 })
-          .skip(skip)
-          .limit(limit)
-          .exec(),
-        this.orderModel.countDocuments().exec(),
+          .aggregate([...pipeline.slice(0, -3), { $count: 'total' }])
+          .then((res) => res[0]?.total || 0),
       ]);
 
-      const totalPages = Math.ceil(total / limit);
+      const totalPages = Math.ceil(totalCount / limit);
 
       return RESPONSE(
         HttpStatus.OK,
         {
           orders,
-          pagination: {
-            total,
-            page,
-            limit,
-            totalPages,
-          },
+          pagination: { total: totalCount, page, limit, totalPages },
         },
         'Orders fetched successfully',
       );
