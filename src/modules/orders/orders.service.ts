@@ -263,4 +263,31 @@ export class OrdersService {
       );
     }
   }
+
+  async findByUserAndStatus(userId: string, status: string) {
+    try {
+      const orders = await this.orderModel
+        .find({ userId, status })
+        .populate('userId', 'fullName email')
+        .populate('items.productId', 'designName price imageUrl')
+        .sort({ orderedAt: -1 })
+        .exec();
+
+      if (!orders || orders.length === 0) {
+        return RESPONSE(
+          HttpStatus.NOT_FOUND,
+          [],
+          'No orders found for this user and status',
+        );
+      }
+
+      return RESPONSE(HttpStatus.OK, orders, 'Orders fetched successfully');
+    } catch (error: any) {
+      return RESPONSE(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        {},
+        'Error fetching orders: ' + error.message,
+      );
+    }
+  }
 }

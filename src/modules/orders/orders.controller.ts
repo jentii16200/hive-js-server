@@ -63,4 +63,13 @@ export class OrdersController {
   async remove(@Param('id') id: string) {
     return this.ordersService.deleteOrder(id);
   }
+
+  // ✅ Get all orders by user ID and status
+  @Get('user/:userId/status/:status')
+  async findByUserAndStatus(
+    @Param('userId') userId: string,
+    @Param('status') status: string,
+  ) {
+    return this.ordersService.findByUserAndStatus(userId, status);
+  }
 }
