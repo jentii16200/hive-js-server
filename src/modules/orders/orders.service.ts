@@ -182,6 +182,11 @@ export class OrdersService {
       if (!order) {
         return RESPONSE(HttpStatus.NOT_FOUND, {}, 'Order not found');
       }
+      console.log('ggg', order.status);
+      if (['awaiting_payment', 'awaiting_cod'].includes(order.status)) {
+        order.status = 'pending';
+      }
+
       return RESPONSE(HttpStatus.OK, order, 'Order fetched successfully');
     } catch (error: any) {
       return RESPONSE(
@@ -264,52 +269,49 @@ export class OrdersService {
     }
   }
 
-async findByUserAndStatus(userId: string, status: string) {
-  try {
-    let statusVar: string | string[] = status
-    
-    if(status === 'pending') {
-      statusVar = [ 'awaiting_payment', 'awaiting_cod'];
-    }
+  async findByUserAndStatus(userId: string, status: string) {
+    try {
+      let statusVar: string | string[] = status;
 
-    const orders = await this.orderModel
-      .find({ userId, status: statusVar })
-      .populate('userId', 'fullName email')
-      .populate('items.productId', 'designName price imageUrl')
-      .sort({ orderedAt: -1 })
-      .exec();
+      if (status === 'pending') {
+        statusVar = ['awaiting_payment', 'awaiting_cod'];
+      }
 
-    if (!orders || orders.length === 0) {
+      const orders = await this.orderModel
+        .find({ userId, status: statusVar })
+        .populate('userId', 'fullName email')
+        .populate('items.productId', 'designName price imageUrl')
+        .sort({ orderedAt: -1 })
+        .exec();
+
+      if (!orders || orders.length === 0) {
+        return RESPONSE(
+          HttpStatus.NOT_FOUND,
+          [],
+          'No orders found for this user and status',
+        );
+      }
+      console.log(orders);
+      // Transform the response so that 'to_ship' and 'to_receive' appear as 'pending'
+      const updatedOrders = orders.map((order) => {
+        const orderObj = order.toObject(); // convert from Mongoose document to plain object
+        if (['awaiting_payment', 'awaiting_cod'].includes(orderObj.status)) {
+          orderObj.status = 'pending';
+        }
+        return orderObj;
+      });
+
       return RESPONSE(
-        HttpStatus.NOT_FOUND,
-        [],
-        'No orders found for this user and status',
+        HttpStatus.OK,
+        updatedOrders,
+        'Orders fetched successfully',
+      );
+    } catch (error: any) {
+      return RESPONSE(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        {},
+        'Error fetching orders: ' + error.message,
       );
     }
-    console.log(orders)
-    // Transform the response so that 'to_ship' and 'to_receive' appear as 'pending'
-    const updatedOrders = orders.map(order => {
-      const orderObj = order.toObject(); // convert from Mongoose document to plain object
-      if ([ 'awaiting_payment', 'awaiting_cod'].includes(orderObj.status)) {
-        orderObj.status = 'pending';
-      }
-      return orderObj;
-    });
-
-    return RESPONSE(
-      HttpStatus.OK,
-      updatedOrders,
-      'Orders fetched successfully',
-    );
-  } catch (error: any) {
-    return RESPONSE(
-      HttpStatus.INTERNAL_SERVER_ERROR,
-      {},
-      'Error fetching orders: ' + error.message,
-    );
   }
-}
-
-
-
 }
