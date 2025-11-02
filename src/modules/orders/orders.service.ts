@@ -264,30 +264,52 @@ export class OrdersService {
     }
   }
 
-  async findByUserAndStatus(userId: string, status: string) {
-    try {
-      const orders = await this.orderModel
-        .find({ userId, status })
-        .populate('userId', 'fullName email')
-        .populate('items.productId', 'designName price imageUrl')
-        .sort({ orderedAt: -1 })
-        .exec();
+async findByUserAndStatus(userId: string, status: string) {
+  try {
+    let statusVar: string | string[] = status
+    
+    if(status === 'pending') {
+      statusVar = [ 'awaiting_payment', 'awaiting_cod'];
+    }
 
-      if (!orders || orders.length === 0) {
-        return RESPONSE(
-          HttpStatus.NOT_FOUND,
-          [],
-          'No orders found for this user and status',
-        );
-      }
+    const orders = await this.orderModel
+      .find({ userId, status: statusVar })
+      .populate('userId', 'fullName email')
+      .populate('items.productId', 'designName price imageUrl')
+      .sort({ orderedAt: -1 })
+      .exec();
 
-      return RESPONSE(HttpStatus.OK, orders, 'Orders fetched successfully');
-    } catch (error: any) {
+    if (!orders || orders.length === 0) {
       return RESPONSE(
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        {},
-        'Error fetching orders: ' + error.message,
+        HttpStatus.NOT_FOUND,
+        [],
+        'No orders found for this user and status',
       );
     }
+    console.log(orders)
+    // Transform the response so that 'to_ship' and 'to_receive' appear as 'pending'
+    const updatedOrders = orders.map(order => {
+      const orderObj = order.toObject(); // convert from Mongoose document to plain object
+      if ([ 'awaiting_payment', 'awaiting_cod'].includes(orderObj.status)) {
+        orderObj.status = 'pending';
+      }
+      return orderObj;
+    });
+
+    return RESPONSE(
+      HttpStatus.OK,
+      updatedOrders,
+      'Orders fetched successfully',
+    );
+  } catch (error: any) {
+    return RESPONSE(
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      {},
+      'Error fetching orders: ' + error.message,
+    );
   }
+}
+
+
+
 }
